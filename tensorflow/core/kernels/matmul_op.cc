@@ -24,6 +24,14 @@ limitations under the License.
 #include "tensorflow/core/framework/register_types.h"
 #include "tensorflow/core/kernels/fill_functor.h"
 #include "tensorflow/core/util/matmul_autotune.h"
+
+#include "tensorflow/core/framework/tensor.h"
+#include "tensorflow/core/framework/tensor.pb.h"
+#include "tensorflow/core/framework/tensor_util.h"
+#include "tensorflow/core/framework/types.h"
+#include <dlfcn.h>
+#include "tensorflow/core/framework/variant_tensor_data.h"
+#include "tensorflow/core/lib/strings/strcat.h"
 #if GOOGLE_CUDA
 #include "cuda/include/cuda.h"
 #include "tensorflow/core/kernels/gpu_utils.h"
@@ -34,12 +42,18 @@ namespace tensorflow {
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;
+typedef Eigen::GpuDevice SGXDevice;
 #ifdef TENSORFLOW_USE_SYCL
 typedef Eigen::SyclDevice SYCLDevice;
 #endif  // TENSORFLOW_USE_SYCL
 
+// matmul for gprc
+typedef char* (*matmul_grpc_main)(int, char**);
+matmul_grpc_main matmul_fn = NULL;
 template <typename Device, typename T, bool USE_CUBLAS>
 struct LaunchMatMul;
+string a_str, b_str;
+string a_size, b_size;
 
 namespace {
 // Converts a TensorFlow Tensor to an Eigen Matrix.
@@ -124,14 +138,76 @@ struct LaunchMatMulBase {
 #ifndef TENSORFLOW_USE_SYCL
     // An explicit vector-matrix multiply is much better optimized than an
     // implicit one and this is a bottleneck during non-batched inference.
+    LOG(INFO) << ctx->device()->name();
+    if (ctx->device()->name().find("SGX") != std::string::npos) {
+      LOG(INFO) << "Setting SGX Device for matmul_op";
+      void* handle = NULL;
+      char* str;
+      char* argv[5];
+      if (matmul_fn == NULL) {
+        handle = dlopen("./libgrpc_matmul.so", RTLD_NOW | RTLD_GLOBAL);
+        if (handle == NULL) {
+          LOG(INFO) << "handle is null"/*"missing *.so file : "
+                       "libgrpc_matmul.so"
+                       ""*/;
+                       LOG(INFO) << dlerror();
+        } else {
+          matmul_fn = (matmul_grpc_main)dlsym(handle, "matmul");
+          if (matmul_fn == NULL) {
+            LOG(INFO) <<"matmul_fun is null";
+            LOG(INFO) << dlerror();
+          } else {
+            str = (char*)"matmul";
+            argv[0] = str;
+            LOG(INFO) << "libgrpc_matmul.so successfully imported";
+          }
+        }
+      }
+
+      a_size = a.shape().DebugString();
+      a_str = a.SummarizeValueSGX(100000000000000);
+      b_size = b.shape().DebugString();
+      b_str = b.SummarizeValueSGX(10000000000000);
+      LOG(INFO) << a_str;
+      LOG(INFO) << "OUTPUT DIM" << out->shape().DebugString();
+
+      TensorShape out_shape = out->shape();
+      argv[1] = (char*)a_size.c_str();
+      argv[2] = (char*)a_str.c_str();
+      LOG(INFO) << "A_STR" << a_str.c_str();
+      argv[3] = (char*)b_size.c_str();
+      LOG(INFO) << "B_STR" << b.SummarizeValue(1000000);
+      argv[4] = (char*)b_str.c_str();
+      LOG(INFO) << "Before mamul_fn calling";
+      char* grpc_result = matmul_fn(5, argv);
+      std::string imm_result = (std::string)grpc_result;
+      std::size_t pos1 = imm_result.find(" ");
+      // LOG(INFO)<< "pos1"<<pos1;
+      std::string str_result =
+          imm_result.substr(pos1, imm_result.length() - pos1);
+      // LOG(INFO)<< str_result;
+      std::vector<float> v;
+      Tensor output(a.dtype(), out_shape);
+      char* token = std::strtok((char*)str_result.c_str(), " ");
+      float imm;
+      for (; token != NULL; token = std::strtok(NULL, " ")) {
+        imm = atof(token);
+        v.push_back(imm);
+      }
+      std::copy_n(v.begin(), v.size(), output.flat<float>().data());
+      LOG(INFO) << output.SummarizeValue(300);
+      // out = output;
+      ctx->set_output(0, output);
+    }
     bool was_vector = ExplicitVectorMatrixOptimization<T>(a, b, dim_pair, out);
     if (!was_vector) {
 #endif  // TENSORFLOW_USE_SYCL
       functor::MatMulFunctor<Device, T>()(ctx->eigen_device<Device>(),
                                           out->matrix<T>(), a.matrix<T>(),
                                           b.matrix<T>(), dim_pair);
-#ifndef TENSORFLOW_USE_SYCL
     }
+#ifndef TENSORFLOW_USE_SYCL
+    
 #endif  // TENSORFLOW_USE_SYCL
   }
 
@@ -145,6 +221,12 @@ struct LaunchMatMulCPU : LaunchMatMulBase<CPUDevice, T> {};
 
 template <typename T, bool USE_CUBLAS>
 struct LaunchMatMul<CPUDevice, T, USE_CUBLAS> : public LaunchMatMulCPU<T> {};
+
+template <typename T>
+struct LaunchMatMulSGX : LaunchMatMulBase<SGXDevice, T> {};
+
+template <typename T, bool USE_CUBLAS>
+struct LaunchMatMul<SGXDevice, T, USE_CUBLAS> : public LaunchMatMulSGX<T> {};
 
 #ifdef TENSORFLOW_USE_SYCL
 template <typename T>
@@ -514,6 +596,17 @@ struct MatMulFunctor<CPUDevice, T> {
   }
 };
 
+template <typename T>
+struct MatMulFunctor<SGXDevice, T> {
+  void operator()(
+      const SGXDevice& d, typename MatMulTypes<T>::out_type out,
+      typename MatMulTypes<T>::in_type in0,
+      typename MatMulTypes<T>::in_type in1,
+      const Eigen::array<Eigen::IndexPair<Eigen::DenseIndex>, 1>& dim_pair) {
+    LOG(INFO) << "SGX";
+  }
+};
+
 #ifdef TENSORFLOW_USE_SYCL
 // Partial specialization MatMulFunctor<Device=SYCLDevice, T>.
 template <typename T>
@@ -540,6 +633,16 @@ struct MatMulFunctor<SYCLDevice, T> {
       Name("MatMul").Device(DEVICE_CPU).TypeConstraint<T>("T"),     \
       MatMulOp<CPUDevice, T, false /* cublas, ignored for CPU */>); \
   REGISTER_CPU_EIGEN(T);
+
+#define REGISTER_SGX(T)                                             \
+  REGISTER_KERNEL_BUILDER(                                          \
+      Name("MatMul").Device(DEVICE_SGX).TypeConstraint<T>("T"),     \
+      MatMulOp<SGXDevice, T, false /* cublas, true by default */>); \
+  REGISTER_KERNEL_BUILDER(Name("MatMul")                            \
+                              .Device(DEVICE_SGX)                   \
+                              .TypeConstraint<T>("T")               \
+                              .Label("cublas"),                     \
+                          MatMulOp<SGXDevice, T, false /* cublas */>)
 
 #define REGISTER_GPU(T)                                            \
   REGISTER_KERNEL_BUILDER(                                         \
@@ -570,6 +673,11 @@ TF_CALL_half(REGISTER_CPU);
 TF_CALL_int32(REGISTER_CPU);
 TF_CALL_complex64(REGISTER_CPU);
 TF_CALL_complex128(REGISTER_CPU);
+
+TF_CALL_float(REGISTER_SGX);
+TF_CALL_double(REGISTER_SGX);
+TF_CALL_complex64(REGISTER_SGX);
+TF_CALL_complex128(REGISTER_SGX);
 #endif
 
 #if GOOGLE_CUDA

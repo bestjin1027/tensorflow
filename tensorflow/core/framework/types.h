@@ -37,6 +37,10 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/types.h"
 
+namespace Eigen {
+  struct SGXDevice;
+};
+
 namespace tensorflow {
 
 // MemoryType is used to describe whether input or output Tensors of
@@ -72,6 +76,7 @@ std::ostream& operator<<(std::ostream& os, const DeviceType& d);
 // Convenient constants that can be passed to a DeviceType constructor
 TF_EXPORT extern const char* const DEVICE_CPU;   // "CPU"
 TF_EXPORT extern const char* const DEVICE_GPU;   // "GPU"
+TF_EXPORT extern const char* const DEVICE_SGX;	 // "SGX
 TF_EXPORT extern const char* const DEVICE_SYCL;  // "SYCL"
 
 template <typename Device>
@@ -79,6 +84,11 @@ struct DeviceName {};
 
 template <>
 struct DeviceName<Eigen::ThreadPoolDevice> {
+  static const std::string value;
+};
+
+template <>
+struct DeviceName<Eigen::SGXDevice> {
   static const std::string value;
 };
 
