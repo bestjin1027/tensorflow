@@ -90,8 +90,6 @@ class BinaryOp : public BinaryOpShared {
 
   void Compute(OpKernelContext* ctx) override {
     // 'state': Shared helper not dependent on T to reduce code size
-    std::cout<<"Compute of BinaryOp by yeo 14";
-    std::cout<<"OpKernel Name : " << ctx->Params->op_kernel->
     BinaryOpState state(ctx);
     if (!ctx->status().ok()) return;
     Tensor* out = state.out;
