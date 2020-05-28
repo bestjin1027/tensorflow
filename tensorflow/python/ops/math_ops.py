@@ -2019,6 +2019,33 @@ _OverrideBinaryOperatorHelper(matmul, "matmul")
 sparse_matmul = gen_math_ops.sparse_mat_mul
 tf_export("sparse_matmul")(sparse_matmul)
 
+@tf_export("mae")
+def mae(a,
+           b,
+           transpose_a=False,
+           transpose_b=False,
+           adjoint_a=False,
+           adjoint_b=False,
+           a_is_sparse=False,
+           b_is_sparse=False,
+           name=None):
+  with ops.name_scope(name, "MatMulAdditionError", [a, b]) as name:
+    if transpose_a and adjoint_a:
+      raise ValueError("Only one of transpose_a and adjoint_a can be True.")
+    if transpose_b and adjoint_b:
+      raise ValueError("Only one of transpose_b and adjoint_b can be True.")
+    if context.executing_eagerly():
+        raise ValueError("eager execution not supported mae")
+    else:
+      a = ops.convert_to_tensor(a, name="a")
+      b = ops.convert_to_tensor(b, name="b")
+    # TODO(apassos) remove _shape_tuple here when it is not needed.
+    a_shape = a._shape_tuple()  # pylint: disable=protected-access
+    b_shape = b._shape_tuple()  # pylint: disable=protected-access
+    return gen_math_ops.mat_mul_addition_error(
+          a, b, transpose_a=transpose_a, transpose_b=transpose_b, name=name)
+_OverrideBinaryOperatorHelper(mae, "mae")
+
 
 @ops.RegisterStatistics("MatMul", "flops")
 def _calc_mat_mul_flops(graph, node):

@@ -267,7 +267,9 @@ class Tensor(_TensorLike):
       "__neg__",
       "__abs__",
       "__matmul__",
-      "__rmatmul__"
+      "__rmatmul__",
+      "__mae__",
+      "__rmae__"
   }
 
   def __init__(self, op, value_index, dtype):

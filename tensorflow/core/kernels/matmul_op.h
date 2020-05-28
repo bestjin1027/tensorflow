@@ -41,6 +41,13 @@ void MatMul(const Device& d, Out out, In0 in0, In1 in1,
   out.device(d) = in0.contract(in1, dim_pair);
 }
 
+template <typename Device, typename In0, typename In1, typename Out,
+          typename DimPair>
+void MatmulAdditionError(const Device& d, Out out, In0 in0, In1 in1,
+            const DimPair& dim_pair) {
+  out.device(d) = in0.contract(in1, dim_pair);
+}
+
 template <typename Device, typename T>
 struct MatMulFunctor {
   // Computes on device "d": out = in0 * in1, where * is matrix

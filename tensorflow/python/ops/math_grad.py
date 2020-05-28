@@ -1058,6 +1058,28 @@ def _MatMulGrad(op, grad):
     grad_b = gen_math_ops.mat_mul(grad, a, transpose_a=True, transpose_b=True)
   return grad_a, grad_b
 
+@ops.RegisterGradient("MatMulAdditionError")
+def _MatMulAdditionErrorGrad(op, grad):
+  """Gradient for MatMulAdditionError."""
+
+  t_a = op.get_attr("transpose_a")
+  t_b = op.get_attr("transpose_b")
+  a = math_ops.conj(op.inputs[0])
+  b = math_ops.conj(op.inputs[1])
+  if not t_a and not t_b:
+    grad_a = gen_math_ops.mat_mul_addition_error(grad, b, transpose_b=True)
+    grad_b = gen_math_ops.mat_mul_addition_error(a, grad, transpose_a=True)
+  elif not t_a and t_b:
+    grad_a = gen_math_ops.mat_mul_addition_error(grad, b)
+    grad_b = gen_math_ops.mat_mul_addition_error(grad, a, transpose_a=True)
+  elif t_a and not t_b:
+    grad_a = gen_math_ops.mat_mul_addition_error(b, grad, transpose_b=True)
+    grad_b = gen_math_ops.mat_mul_addition_error(a, grad)
+  elif t_a and t_b:
+    grad_a = gen_math_ops.mat_mul_addition_error(b, grad, transpose_a=True, transpose_b=True)
+    grad_b = gen_math_ops.mat_mul_addition_error(grad, a, transpose_a=True, transpose_b=True)
+  return grad_a, grad_b
+
 
 @ops.RegisterGradient("SparseMatMul")
 def _SparseMatMulGrad(op, grad):

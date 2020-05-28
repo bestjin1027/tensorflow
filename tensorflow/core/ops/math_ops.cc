@@ -716,6 +716,17 @@ REGISTER_OP("MatMul")
     .Attr("T: {bfloat16, half, float, double, int32, complex64, complex128}")
     .SetShapeFn(shape_inference::MatMulShape);
 
+REGISTER_OP("MatMulAdditionError")
+    .Input("a: T")
+    .Input("b: T")
+    .Output("product: T")
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr(
+        "T: {float, double, complex64, "
+        "complex128}")
+    .SetShapeFn(shape_inference::MatMulAdditionErrorShape);
+
 REGISTER_OP("SparseMatMul")
     .Input("a: Ta")
     .Input("b: Tb")

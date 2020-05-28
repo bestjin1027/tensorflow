@@ -8,25 +8,23 @@ W = tf.Variable(tf.random_uniform([1, 2], -1.0, 1.0))   # [2, 1]은 안 된다. 
 b = tf.Variable(tf.random_uniform([1], -1.0, 1.0))
 
 # W와 곱해야 하기 때문에 x_data를 실수로 변경
-'''
 with tf.device('sgx'):	
-	hypothesis = tf.matmul(W, x_data) + b                   # (1x2) * (2x5) = (1x5)
-'''
-hypothesis = tf.matmul(W, x_data) + b
-cost = tf.reduce_mean(tf.square(hypothesis - y_data))
+	hypothesis = tf.mae(W, b)                   # (1x2) * (2x5) = (1x5)
+
+cost = tf.reduce_mean(tf.square(hypothesis))
 
 rate = tf.Variable(0.1)
 optimizer = tf.train.GradientDescentOptimizer(rate)
 train = optimizer.minimize(cost)
 
-init = tf.initialize_all_variables()
+init = tf.global_variables_initializer()
 
 sess = tf.Session()
 sess.run(init)
 
 # 테스트 출력
-print(sess.run(W))
-print(sess.run(tf.matmul(W, x_data)))
+#print(sess.run(W))
+#print(sess.run(tf.matmul(W, x_data)))
 
 for step in range(2001):
 	sess.run(train)
