@@ -204,16 +204,20 @@ Status MatMulAdditionErrorShape(shape_inference::InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 2, &a));
 
   ShapeHandle b;
-  TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 1, &b));
-
+  
+  TF_RETURN_IF_ERROR(c->WithRankAtLeast(c->input(1), 1, &b));
   bool transpose_a, transpose_b;
   TF_RETURN_IF_ERROR(c->GetAttr("transpose_a", &transpose_a));
   TF_RETURN_IF_ERROR(c->GetAttr("transpose_b", &transpose_b));
+  std::cout << "===============transpose_a : " << transpose_a << " transpose_b : " << transpose_b <<std::endl;
 
+/*
   DimensionHandle output_rows = transpose_a ? c->Dim(a, 1) : c->Dim(a, 0);
   DimensionHandle output_cols = c->Dim(a,1);
-//  DimensionHandle output_cols = transpose_b ? c->Dim(b, 0) : c->Dim(b, 1);
-
+  DimensionHandle output_cols = transpose_b ? c->Dim(b, 0) : c->Dim(b, 1);
+*/
+  DimensionHandle output_rows = transpose_b ? c->Dim(b,1) : c->Dim(b,0);
+  DimensionHandle output_cols = transpose_b ? c->Dim(b,0) : c->Dim(b,1);
 
   // Validate that the inner shapes are compatible.
   DimensionHandle inner_a = transpose_a ? c->Dim(a, 0) : c->Dim(a, 1);

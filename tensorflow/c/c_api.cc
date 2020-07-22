@@ -1418,10 +1418,11 @@ static TF_Operation* TF_FinishOperationLocked(TF_OperationDescription* desc,
                               desc->colocation_constraints.end()));
     }
     status->status = desc->node_builder.Finalize(&desc->graph->graph, &ret);
-
+    std::cout <<"in c_api.cc : "<< desc->node_builder.node_name() <<" status : "<< status->status.ok() << std::endl;
     if (status->status.ok()) {
       // Run shape inference function for newly added node.
       status->status = desc->graph->refiner.AddNode(ret);
+      std::cout <<"in c_api.cc : "<< desc->node_builder.node_name() <<" status : "<< status->status.ok() << std::endl;
     }
     if (status->status.ok()) {
       // Add the node to the name-to-node mapping.
