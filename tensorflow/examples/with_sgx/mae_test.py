@@ -8,8 +8,8 @@ W = tf.Variable(tf.random_uniform([1, 2], -1.0, 1.0))   # [2, 1]은 안 된다. 
 b = tf.Variable(tf.random_uniform([1], -1.0, 1.0))
 
 # W와 곱해야 하기 때문에 x_data를 실수로 변경
-with tf.device('sgx'):	
-	hypothesis = tf.mae(W, b)                   # (1x2) * (2x5) = (1x5)
+	
+hypothesis = tf.mae(W, b)                   # (1x2) * (2x5) = (1x5)
 
 cost = tf.reduce_mean(tf.square(hypothesis))
 

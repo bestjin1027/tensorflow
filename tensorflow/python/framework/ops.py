@@ -3399,7 +3399,6 @@ class Graph(object):
       name = self.unique_name(name)
 
     node_def = _NodeDef(op_type, name, device=None, attrs=attrs)
-
     input_ops = set([t.op for t in inputs])
     control_inputs = self._control_dependencies_for_inputs(input_ops)
     # _create_op_helper mutates the new Operation. _lock ensures a Session.run

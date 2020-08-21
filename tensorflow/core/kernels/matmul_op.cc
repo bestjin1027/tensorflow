@@ -50,12 +50,16 @@ typedef Eigen::SyclDevice SYCLDevice;
 // matmul for gprc
 typedef char* (*matmul_grpc_main)(int, char**);
 matmul_grpc_main matmul_fn = NULL;
+matmul_grpc_main mae_w_fn = NULL;
+matmul_grpc_main mae_b_fn = NULL;
+matmul_grpc_main fn_real = NULL;
 template <typename Device, typename T, bool USE_CUBLAS>
 struct LaunchMatMul;
 template <typename Device, typename T, bool USE_CUBLAS>
 struct LaunchMAE;
-string a_str, b_str;
-string a_size, b_size;
+template <typename Device, typename T, bool USE_CUBLAS>
+struct LaunchMAEGrad;
+void* handle = NULL;
 
 namespace {
 // Converts a TensorFlow Tensor to an Eigen Matrix.
@@ -140,9 +144,7 @@ struct LaunchMatMulBase {
 #ifndef TENSORFLOW_USE_SYCL
     // An explicit vector-matrix multiply is much better optimized than an
     // implicit one and this is a bottleneck during non-batched inference.
-    LOG(INFO) << ctx->device()->name();
     if (ctx->device()->name().find("SGX") != std::string::npos) {
-      LOG(INFO) << "Setting SGX Device for matmul_op";
       void* handle = NULL;
       char* str;
       char* argv[5];
@@ -166,12 +168,11 @@ struct LaunchMatMulBase {
         }
       }
 
-      a_size = a.shape().DebugString();
-      a_str = a.SummarizeValueSGX(100000000000000);
-      b_size = b.shape().DebugString();
-      b_str = b.SummarizeValueSGX(10000000000000);
-      LOG(INFO) << a_str;
-      LOG(INFO) << "OUTPUT DIM" << out->shape().DebugString();
+      std::string a_size = a.shape().DebugString();
+      std::string a_str = a.SummarizeValueSGX(100000000000000);
+      std::string b_size = b.shape().DebugString();
+      std::string b_str = b.SummarizeValueSGX(10000000000000);
+
 
       TensorShape out_shape = out->shape();
       argv[1] = (char*)a_size.c_str();
@@ -194,17 +195,17 @@ struct LaunchMatMulBase {
         v.push_back(imm);
       }
       std::copy_n(v.begin(), v.size(), output.flat<float>().data());
-      LOG(INFO) << output.SummarizeValue(300);
       // out = output;
       ctx->set_output(0, output);
     }
-    bool was_vector = ExplicitVectorMatrixOptimization<T>(a, b, dim_pair, out);
-    if (!was_vector) {
+    // by yeo
+ //   bool was_vector = ExplicitVectorMatrixOptimization<T>(a, b, dim_pair, out);
+ //   if (!was_vector) {
 #endif  // TENSORFLOW_USE_SYCL
-      functor::MatMulFunctor<Device, T>()(ctx->eigen_device<Device>(),
+      /*functor::MatMulFunctor<Device, T>()(ctx->eigen_device<Device>(),
                                           out->matrix<T>(), a.matrix<T>(),
-                                          b.matrix<T>(), dim_pair);
-    }
+                                          b.matrix<T>(), dim_pair);*/
+  //  }
 #ifndef TENSORFLOW_USE_SYCL
     
 #endif  // TENSORFLOW_USE_SYCL
@@ -227,14 +228,14 @@ struct LaunchMAEBase {
 #ifndef TENSORFLOW_USE_SYCL
     // An explicit vector-matrix multiply is much better optimized than an
     // implicit one and this is a bottleneck during non-batched inference.
+
     
-    if (ctx->device()->name().find("SGX") != std::string::npos) {
-      LOG(INFO) << "Setting SGX Device for mae_op";
-      void* handle = NULL;
+      
       char* str;
       char* argv[5];
       if (matmul_fn == NULL) {
-        handle = dlopen("./libgrpc_matmul.so", RTLD_NOW | RTLD_GLOBAL);
+        if(handle == NULL)
+        handle = dlopen("./libgrpc_mae.so", RTLD_NOW | RTLD_GLOBAL);
         if (handle == NULL) {
           LOG(INFO) << "handle is null"/*"missing *.so file : "
                        "libgrpc_matmul.so"
@@ -253,10 +254,11 @@ struct LaunchMAEBase {
         }
       }
 
-      a_size = a.shape().DebugString();
-      a_str = a.SummarizeValueSGX(100000000000000);
-      b_size = b.shape().DebugString();
-      b_str = b.SummarizeValueSGX(10000000000000);
+      std::string a_size = a.shape().DebugString();
+      std::string a_str = a.SummarizeValueSGX(100000000000000);
+      std::string b_size = b.shape().DebugString();
+      std::string b_str = b.SummarizeValueSGX(10000000000000);
+
 
       TensorShape out_shape = out->shape();
       argv[1] = (char*)a_size.c_str();
@@ -282,7 +284,104 @@ struct LaunchMAEBase {
       //LOG(INFO) << output.SummarizeValue(300);
       // out = output;
       ctx->set_output(0, output);
-    }
+    
+    //bool was_vector = ExplicitVectorMatrixOptimization<T>(a, b, dim_pair, out);
+    //if (!was_vector) {
+#endif  // TENSORFLOW_USE_SYCL
+
+#ifndef TENSORFLOW_USE_SYCL
+    
+#endif  // TENSORFLOW_USE_SYCL
+  }
+
+  static void GetBlasGemmAlgorithm(OpKernelConstruction* ctx,
+                                   std::vector<int64>* algorithms,
+                                   bool* algorithm_set_flag) {}
+};
+
+template <typename Device, typename T>
+struct LaunchMAEGradBase {
+#if GOOGLE_CUDA
+  typedef se::blas::AlgorithmType AlgorithmType;
+#else
+  typedef int64 AlgorithmType;
+#endif  // GOOGLE_CUDA
+
+  static void launch(
+      OpKernelContext* ctx, const Tensor& a, const Tensor& b, Tensor* out, int grad_idx) {
+#ifndef TENSORFLOW_USE_SYCL
+    // An explicit vector-matrix multiply is much better optimized than an
+    // implicit one and this is a bottleneck during non-batched inference.
+
+      char* str;
+      char* argv[5];
+      if (mae_w_fn == NULL || mae_b_fn==NULL) {
+        if (handle==NULL)
+        handle = dlopen("./libgrpc_mae.so", RTLD_NOW | RTLD_GLOBAL);
+        if (handle == NULL) {
+          LOG(INFO) << "handle is null"/*"missing *.so file : "
+                       "libgrpc_matmul.so"
+                       ""*/;
+                       LOG(INFO) << dlerror();
+        } else {
+            mae_w_fn = (matmul_grpc_main)dlsym(handle, "grad_w");
+            mae_b_fn = (matmul_grpc_main)dlsym(handle, "grad_b");
+          if (mae_w_fn == NULL || mae_b_fn == NULL) {
+            LOG(INFO) <<"maegrad_fun is null";
+            LOG(INFO) << dlerror();
+          } else {
+            LOG(INFO) << "libgrpc_matmul.so successfully imported";
+          }
+        }
+      }
+
+      std::string a_size = a.shape().DebugString();
+      std::string a_str = a.SummarizeValueSGX(100000000000000);
+      std::string b_size = b.shape().DebugString();
+      std::string b_str = b.SummarizeValueSGX(10000000000000);
+
+      if(grad_idx==0){
+        str = (char*)"grad_w";
+        fn_real = mae_w_fn;
+      } else { 
+        str = (char*)"grad_b";
+        fn_real = mae_b_fn;
+      }
+
+      argv[0] = str;
+      TensorShape out_shape = out->shape();
+      argv[1] = (char*)a_size.c_str();
+      argv[2] = (char*)a_str.c_str();
+      argv[3] = (char*)b_size.c_str();
+      argv[4] = (char*)b_str.c_str();
+     
+      char* grpc_result = fn_real(5, argv);
+      std::string imm_result = (std::string)grpc_result;
+      std::vector<float> v;
+      Tensor output(a.dtype(), out_shape);
+      float imm;
+      if (grad_idx == 0) {
+        std::size_t pos1 = imm_result.find(" ");
+        std::string str_result =
+            imm_result.substr(pos1, imm_result.length() - pos1);
+
+        char* token = std::strtok((char*)str_result.c_str(), " ");
+        
+        for (; token != NULL; token = std::strtok(NULL, " ")) {
+          imm = atof(token);
+          v.push_back(imm);
+        }
+      }
+
+      if (grad_idx == 1){
+        imm = atof(imm_result.c_str());
+        v.push_back(imm);
+      }
+      std::copy_n(v.begin(), v.size(), output.flat<float>().data());
+      //LOG(INFO) << output.SummarizeValue(300);
+      // out = output;
+      ctx->set_output(0, output);
+    
     //bool was_vector = ExplicitVectorMatrixOptimization<T>(a, b, dim_pair, out);
     //if (!was_vector) {
 #endif  // TENSORFLOW_USE_SYCL
@@ -317,6 +416,12 @@ struct LaunchMAESGX : LaunchMAEBase<SGXDevice, T> {};
 
 template <typename T, bool USE_CUBLAS>
 struct LaunchMAE<SGXDevice, T, USE_CUBLAS> : public LaunchMAESGX<T> {};
+
+template <typename T>
+struct LaunchMAESGXGrad : LaunchMAEGradBase<SGXDevice, T> {};
+
+template <typename T, bool USE_CUBLAS>
+struct LaunchMAEGrad<SGXDevice, T, USE_CUBLAS>  : public LaunchMAESGXGrad<T> {};
 
 #ifdef TENSORFLOW_USE_SYCL
 template <typename T>
@@ -633,6 +738,8 @@ class MatMulOp : public OpKernel {
     dim_pair[0].first = transpose_a_ ? 0 : 1;
     dim_pair[0].second = transpose_b_ ? 1 : 0;
 
+
+
     OP_REQUIRES(
         ctx, a.dim_size(dim_pair[0].first) == b.dim_size(dim_pair[0].second),
         errors::InvalidArgument(
@@ -644,6 +751,8 @@ class MatMulOp : public OpKernel {
         {a.dim_size(a_dim_remaining), b.dim_size(b_dim_remaining)});
     Tensor* out = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, out_shape, &out));
+
+
 
     if (out->NumElements() == 0) {
       // If a has shape [0, x] or b has shape [x, 0], the output shape
@@ -689,51 +798,38 @@ class MatMulAdditionErrorOp : public OpKernel {
     const Tensor& a = ctx->input(0);
     const Tensor& b = ctx->input(1);
 
-    // Check that the dimensions of the two matrices are valid.
-    /*
-    OP_REQUIRES(ctx, TensorShapeUtils::IsMatrix(a.shape()),
-                errors::InvalidArgument("In[0] is not a matrix"));
-    OP_REQUIRES(ctx, TensorShapeUtils::IsMatrix(b.shape()),
-                errors::InvalidArgument("In[1] is not a matrix"));
-                */
-    /*
-    Eigen::array<Eigen::IndexPair<Eigen::DenseIndex>, 1> dim_pair;
-    dim_pair[0].first = transpose_a_ ? 0 : 1;
-    dim_pair[0].second = transpose_b_ ? 1 : 0;
-    */
-    /*OP_REQUIRES(
-        ctx, a.dim_size(dim_pair[0].first) == b.dim_size(dim_pair[0].second),
-        errors::InvalidArgument(
-            "Matrix size-incompatible: In[0]: ", a.shape().DebugString(),
-            ", In[1]: ", b.shape().DebugString()));*/
-    /*
-    int a_dim_remaining = 1 - dim_pair[0].first;
-    int b_dim_remaining = 1 - dim_pair[0].second;
-    */
-    TensorShape out_shape(
-        {1, 5});
+   TensorShape out_shape({1,5});
+   if(transpose_b_) {
+     out_shape.set_dim(0,1);
+     out_shape.set_dim(1,2);
+   }
+   else if(transpose_a_){
+     out_shape.set_dim(0,1);
+     out_shape.RemoveDim(1);
+   }
+  
     Tensor* out = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, out_shape, &out));
 
-/*
-    if (out->NumElements() == 0) {
-      // If a has shape [0, x] or b has shape [x, 0], the output shape
-      // is a 0-element matrix, so there is nothing to do.
-      return;
-    }
-
     if (a.NumElements() == 0 || b.NumElements() == 0) {
-      // If a has shape [x, 0] and b has shape [0, y], the
-      // output shape is [x, y] where x and y are non-zero, so we fill
-      // the output with zeros.
       functor::SetZeroFunctor<Device, T> f;
       f(ctx->eigen_device<Device>(), out->flat<T>());
       return;
     }
-*/
+
+    if(!transpose_a_&&!transpose_b_){
     LaunchMAE<Device, T, USE_CUBLAS>::launch(
         ctx, a, b, out);
-  }
+    } else {
+      if(transpose_a_)
+        LaunchMAEGrad<Device, T, USE_CUBLAS>::launch(
+            ctx, a, b, out,1);
+      else if(transpose_b_)
+        LaunchMAEGrad<Device, T, USE_CUBLAS>::launch(
+            ctx, a, b, out,0);
+      else std::cout<<"gradienting false"<<std::endl;
+    }
+}
 
  private:
   std::vector<int64> algorithms_;

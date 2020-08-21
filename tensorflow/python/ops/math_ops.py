@@ -2021,14 +2021,14 @@ tf_export("sparse_matmul")(sparse_matmul)
 
 @tf_export("mae")
 def mae(a,
-           b,
-           transpose_a=False,
-           transpose_b=False,
-           adjoint_a=False,
-           adjoint_b=False,
-           a_is_sparse=False,
-           b_is_sparse=False,
-           name=None):
+        b,
+        transpose_a=False,
+        transpose_b=False,
+        adjoint_a=False,
+        adjoint_b=False,
+        a_is_sparse=False,
+        b_is_sparse=False,
+        name=None):
   with ops.name_scope(name, "MatMulAdditionError", [a, b]) as name:
     if transpose_a and adjoint_a:
       raise ValueError("Only one of transpose_a and adjoint_a can be True.")

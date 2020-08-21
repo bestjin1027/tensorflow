@@ -204,20 +204,12 @@ Status MatMulAdditionErrorShape(shape_inference::InferenceContext* c) {
   TF_RETURN_IF_ERROR(c->WithRank(c->input(0), 2, &a));
 
   ShapeHandle b;
-  
   TF_RETURN_IF_ERROR(c->WithRankAtLeast(c->input(1), 1, &b));
+  
   bool transpose_a, transpose_b;
   TF_RETURN_IF_ERROR(c->GetAttr("transpose_a", &transpose_a));
   TF_RETURN_IF_ERROR(c->GetAttr("transpose_b", &transpose_b));
-  std::cout << "===============transpose_a : " << transpose_a << " transpose_b : " << transpose_b <<std::endl;
 
-
-  DimensionHandle output_rows = transpose_a ? c->Dim(a, 1) : c->Dim(a, 0);
-  DimensionHandle output_cols = transpose_b ? c->Dim(b, 0) : c->Dim(b, 1);
-
- 
-
-  //TF_RETURN_IF_ERROR(c->Merge(inner_a, inner_b, &merged));
   if(transpose_a) c->set_output(0, c->Vector(1));
   else if(transpose_b) c->set_output(0, c->Matrix(1, 2));
   else c->set_output(0, c->Matrix(1,5)); // communication with grpc_server is needed to get ouput_cols

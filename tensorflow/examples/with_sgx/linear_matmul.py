@@ -4,8 +4,9 @@ import tensorflow as tf
 x_data = [[1., 0., 3., 0., 5.], [0., 2., 0., 4., 0.]]   # W의 값은 [[-0.49763036  0.79181528]]
 y_data  = [1, 2, 3, 4, 5]
 
-W = tf.Variable(tf.random_uniform([1, 2], -1.0, 1.0))   # [2, 1]은 안 된다. 행렬 곱셈이니까.
-b = tf.Variable(tf.random_uniform([1], -1.0, 1.0))
+with tf.device('cpu'):
+	W = tf.Variable(tf.random_uniform([1, 2], -1.0, 1.0))   # [2, 1]은 안 된다. 행렬 곱셈이니까.
+	b = tf.Variable(tf.random_uniform([1], -1.0, 1.0))
 
 # W와 곱해야 하기 때문에 x_data를 실수로 변경
 
@@ -30,7 +31,7 @@ print(sess.run(tf.matmul(W, x_data)))
 for step in range(2001):
 	sess.run(train)
 
-	if step%20 == 0:
+	if step%500 == 0:
 		print(step, sess.run(cost), sess.run(W), sess.run(b))
 
 sess.close()
