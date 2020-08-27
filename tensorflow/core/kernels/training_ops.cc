@@ -443,6 +443,7 @@ class ApplyGradientDescentOp : public OpKernel {
                 errors::InvalidArgument("alpha is not a scalar: ",
                                         alpha.shape().DebugString()));
     const Tensor& delta = ctx->input(2);
+    //by yeo std::cout<<"************yeo****" <<var.shape().DebugString()<<std::endl<<delta.shape().DebugString()<<std::endl;
     OP_REQUIRES(
         ctx, var.shape().IsSameSize(delta.shape()),
         errors::InvalidArgument("var and delta do not have the same shape",

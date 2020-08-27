@@ -1061,17 +1061,13 @@ def _MatMulGrad(op, grad):
 @ops.RegisterGradient("MatMulAdditionError")
 def _MatMulAdditionErrorGrad(op, grad):
   """Gradient for MatMulAdditionError."""
-
   t_a = op.get_attr("transpose_a")
   t_b = op.get_attr("transpose_b")
   a = math_ops.conj(op.inputs[0])
   b = math_ops.conj(op.inputs[1])
-  print("==========================================================a : ", t_a , "b : ", t_b)
   if not t_a and not t_b:
     grad_a = gen_math_ops.mat_mul_addition_error(grad, b, transpose_b=True)
-    print("grad a : ", grad_a)
     grad_b = gen_math_ops.mat_mul_addition_error(a, grad, transpose_a=True)
-    print("grad b : ", grad_b)
   elif not t_a and t_b:
     grad_a = gen_math_ops.mat_mul_addition_error(grad, b)
     grad_b = gen_math_ops.mat_mul_addition_error(grad, a, transpose_a=True)

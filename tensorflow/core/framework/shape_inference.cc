@@ -361,7 +361,7 @@ Status InferenceContext::WithRank(ShapeHandle shape, int64 rank,
   }
   *out = nullptr;
 
-  return errors::InvalidArgument("yeo Shape must be rank ", rank, " but is rank ",
+  return errors::InvalidArgument("Shape must be rank ", rank, " but is rank ",
                                  existing);
 }
 
